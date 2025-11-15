@@ -1,0 +1,6 @@
+<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="300" fill="#f8f9fa"/>
+  <text x="200" y="130" font-family="Arial, sans-serif" font-size="60" fill="#f89628" text-anchor="middle">🍔</text>
+  <text x="200" y="180" font-family="Arial, sans-serif" font-size="18" fill="#999" text-anchor="middle">Q-Bab Burger</text>
+  <text x="200" y="205" font-family="Arial, sans-serif" font-size="14" fill="#bbb" text-anchor="middle">Image Coming Soon</text>
+</svg>

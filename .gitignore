@@ -1,0 +1,56 @@
+# Environment files
+.env
+.env.local
+.env.production
+
+# Sensitive data
+*_adminpuk.json
+tss_*.json
+
+# Database credentials
+database/config.php
+
+# Node modules (if any)
+node_modules/
+npm-debug.log
+
+# Composer
+/vendor/
+composer.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+error_log
+
+# Cache
+cache/
+tmp/
+temp/
+
+# Uploads (if sensitive)
+uploads/private/
+
+# Build files
+dist/
+build/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# PHP session files
+sessions/

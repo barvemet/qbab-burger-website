@@ -1,0 +1,266 @@
+/* Newsletter Popup Modal */
+.newsletter-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 99999;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.newsletter-popup-overlay.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+}
+
+.newsletter-popup {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    max-width: 1000px;
+    width: 90%;
+    background: #ffffff;
+    border-radius: 0;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    transform: scale(0.9);
+    transition: transform 0.4s ease;
+}
+
+.newsletter-popup-overlay.active .newsletter-popup {
+    transform: scale(1);
+}
+
+/* Left Side - Image */
+.newsletter-popup-image {
+    position: relative;
+    background-image: url('../images/gourmet-burger.jpg');
+    background-size: cover;
+    background-position: center;
+    min-height: 600px;
+    overflow: hidden;
+}
+
+.newsletter-popup-image::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(225, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+/* Right Side - Content */
+.newsletter-popup-content {
+    padding: 60px 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #ffffff;
+}
+
+.newsletter-popup-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: all 0.3s ease;
+}
+
+.newsletter-popup-close:hover {
+    background: #e10000;
+    transform: rotate(90deg);
+}
+
+.newsletter-popup-close svg {
+    width: 20px;
+    height: 20px;
+    stroke: #1a1a1a;
+}
+
+.newsletter-popup-close:hover svg {
+    stroke: #ffffff;
+}
+
+.newsletter-popup-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3rem;
+    line-height: 1.1;
+    letter-spacing: 2px;
+    color: #1a1a1a;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.newsletter-popup-subtitle {
+    font-size: 1rem;
+    color: #666666;
+    margin-bottom: 40px;
+    line-height: 1.6;
+}
+
+.newsletter-popup-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.newsletter-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.newsletter-input-wrapper svg {
+    position: absolute;
+    left: 20px;
+    width: 20px;
+    height: 20px;
+    stroke: #999999;
+    pointer-events: none;
+}
+
+.newsletter-popup-input {
+    width: 100%;
+    padding: 18px 20px 18px 55px;
+    border: 2px solid #e0e0e0;
+    border-radius: 0;
+    font-size: 1rem;
+    color: #1a1a1a;
+    transition: all 0.3s ease;
+}
+
+.newsletter-popup-input:focus {
+    outline: none;
+    border-color: #e10000;
+}
+
+.newsletter-popup-input::placeholder {
+    color: #999999;
+}
+
+.newsletter-checkbox-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 10px 0;
+}
+
+.newsletter-checkbox-wrapper input[type="checkbox"] {
+    margin-top: 4px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.newsletter-checkbox-wrapper label {
+    font-size: 0.9rem;
+    color: #666666;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.newsletter-checkbox-wrapper a {
+    color: #e10000;
+    text-decoration: underline;
+}
+
+.newsletter-submit-btn {
+    padding: 18px 40px;
+    background: #e10000;
+    color: #ffffff;
+    border: none;
+    border-radius: 0;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+}
+
+.newsletter-submit-btn:hover {
+    background: #c90000;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(225, 0, 0, 0.3);
+}
+
+.newsletter-submit-btn:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.newsletter-alert {
+    padding: 15px 20px;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.newsletter-alert.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    display: block;
+}
+
+.newsletter-alert.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    display: block;
+}
+
+/* Responsive */
+@media (max-width: 968px) {
+    .newsletter-popup {
+        grid-template-columns: 1fr;
+        max-width: 500px;
+    }
+
+    .newsletter-popup-image {
+        display: none;
+    }
+
+    .newsletter-popup-content {
+        padding: 50px 30px;
+    }
+
+    .newsletter-popup-title {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .newsletter-popup-content {
+        padding: 40px 25px;
+    }
+
+    .newsletter-popup-title {
+        font-size: 2rem;
+    }
+
+    .newsletter-submit-btn {
+        padding: 16px 30px;
+        font-size: 1.1rem;
+    }
+}

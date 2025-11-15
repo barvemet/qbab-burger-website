@@ -1,0 +1,16 @@
+# Admin panel .htaccess
+# Allow direct access to admin files
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Don't redirect admin files
+RewriteRule .* - [L]
+
+# Set directory index
+DirectoryIndex index.php
+
+# Allow access to all PHP files in admin folder
+<FilesMatch "\.php$">
+    Require all granted
+</FilesMatch>
