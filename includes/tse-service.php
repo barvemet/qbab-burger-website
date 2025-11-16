@@ -3,9 +3,9 @@
  * TSE (Technische Sicherheitseinrichtung) Service
  * Integration with Fiskaly Cloud TSE
  * Compliant with German KassenSichV (Kassensicherungsverordnung)
- * 
+ *
  * @author Q-Bab Kasse System
- * @version 2.0 - Fiskaly Integration
+ * @version 3.0 - Production Ready with Token Caching
  */
 
 // Prevent direct access
@@ -21,13 +21,17 @@ class TSEService {
     private $apiBaseUrl;
     private $enabled;
     private $authToken;
+    private $tokenExpiry;
+
+    // Token cache duration (in seconds) - Fiskaly tokens are valid for 24 hours
+    private const TOKEN_CACHE_DURATION = 3600; // 1 hour for safety
 
     public function __construct() {
         // Load configuration from environment (check multiple sources for Strato compatibility)
         $this->apiKey = $this->getEnvVar('FISKALY_API_KEY');
         $this->apiSecret = $this->getEnvVar('FISKALY_API_SECRET');
         $this->tssId = $this->getEnvVar('FISKALY_TSS_ID');
-        
+
         // Client ID must be UUID format for Fiskaly
         $envClientId = $this->getEnvVar('FISKALY_CLIENT_ID');
         if ($envClientId && $this->isValidUuid($envClientId)) {
@@ -36,7 +40,7 @@ class TSEService {
             // Generate a deterministic UUID based on a fixed string for this POS
             $this->clientId = $this->generateDeterministicUuid('qbab-pos-001');
         }
-        
+
         // Check if middleware is enabled
         $useMiddleware = $this->getEnvVar('FISKALY_USE_MIDDLEWARE');
         $middlewareUrl = $this->getEnvVar('FISKALY_MIDDLEWARE_URL');
@@ -51,16 +55,17 @@ class TSEService {
             error_log('TSE: Using direct Cloud API');
         }
 
-        // Debug log
-        if (!empty($this->apiKey)) {
-            error_log('TSE Service initialized: API Key=' . substr($this->apiKey, 0, 15) . '..., TSS ID=' . $this->tssId);
-        }
-        
         // Check if TSE is enabled
         $this->enabled = !empty($this->apiKey) && !empty($this->apiSecret) && !empty($this->tssId);
-        $this->authToken = null;
-        
-        if (!$this->enabled) {
+
+        // Initialize token cache from session
+        $this->authToken = $_SESSION['fiskaly_token'] ?? null;
+        $this->tokenExpiry = $_SESSION['fiskaly_token_expiry'] ?? 0;
+
+        // Debug log
+        if ($this->enabled) {
+            error_log('TSE Service initialized: API Key=' . substr($this->apiKey, 0, 15) . '..., TSS ID=' . $this->tssId . ', Client ID=' . $this->clientId);
+        } else {
             error_log('TSE Service: Not configured. Set FISKALY_API_KEY, FISKALY_API_SECRET and FISKALY_TSS_ID in .env file.');
         }
     }
@@ -73,7 +78,7 @@ class TSEService {
     private function isValidUuid($uuid) {
         return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid) === 1;
     }
-    
+
     /**
      * Generate deterministic UUID from string (for consistent client ID)
      * @param string $string
@@ -110,17 +115,20 @@ class TSEService {
     }
 
     /**
-     * Get authentication token (JWT) for Fiskaly API
+     * Get authentication token (JWT) for Fiskaly API with caching
+     * @param bool $forceRefresh Force token refresh
      * @return string|null
      */
-    private function getAuthToken() {
-        if ($this->authToken) {
+    private function getAuthToken($forceRefresh = false) {
+        // Check if cached token is still valid
+        if (!$forceRefresh && $this->authToken && time() < $this->tokenExpiry) {
+            error_log('TSE: Using cached auth token (expires in ' . ($this->tokenExpiry - time()) . ' seconds)');
             return $this->authToken;
         }
 
         try {
             // Fiskaly v2 API requires Bearer token (JWT)
-            // We need to authenticate with API Key and Secret to get the token
+            error_log('TSE: Requesting new auth token from Fiskaly API');
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $this->apiBaseUrl . '/auth');
@@ -133,6 +141,7 @@ class TSEService {
                 'api_key' => $this->apiKey,
                 'api_secret' => $this->apiSecret
             ]));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10); // 10 second timeout
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -148,12 +157,18 @@ class TSEService {
                 $data = json_decode($response, true);
                 if (isset($data['access_token'])) {
                     $this->authToken = $data['access_token'];
-                    error_log('TSE: Auth token obtained successfully (Bearer JWT)');
+                    $this->tokenExpiry = time() + self::TOKEN_CACHE_DURATION;
+
+                    // Store in session for persistence across requests
+                    $_SESSION['fiskaly_token'] = $this->authToken;
+                    $_SESSION['fiskaly_token_expiry'] = $this->tokenExpiry;
+
+                    error_log('TSE: Auth token obtained successfully (valid for ' . self::TOKEN_CACHE_DURATION . ' seconds)');
                     return $this->authToken;
                 }
             }
 
-            error_log('TSE: Auth failed - HTTP ' . $httpCode . ' - Response: ' . $response);
+            error_log('TSE: Auth failed - HTTP ' . $httpCode . ' - Response: ' . substr($response, 0, 500));
             return null;
 
         } catch (Exception $e) {
@@ -168,6 +183,21 @@ class TSEService {
      */
     public function isEnabled() {
         return $this->enabled;
+    }
+
+    /**
+     * Get TSE configuration info (for debugging)
+     * @return array
+     */
+    public function getConfig() {
+        return [
+            'enabled' => $this->enabled,
+            'tss_id' => $this->tssId,
+            'client_id' => $this->clientId,
+            'api_base_url' => $this->apiBaseUrl,
+            'has_token' => !empty($this->authToken),
+            'token_expires_in' => max(0, $this->tokenExpiry - time())
+        ];
     }
 
     /**
@@ -214,7 +244,7 @@ class TSEService {
             return null;
         }
     }
-    
+
     /**
      * Ensure TSS is initialized
      * @return bool
@@ -305,9 +335,10 @@ class TSEService {
      * @param float $amount Total amount
      * @param string $paymentType Payment method (cash, card, etc.)
      * @param string|null $transactionId Transaction ID from initTransaction
+     * @param array $items Order items for detailed receipt (optional)
      * @return array|null Signature data or null on failure
      */
-    public function signTransaction($orderId, $amount, $paymentType = 'Bar', $transactionId = null) {
+    public function signTransaction($orderId, $amount, $paymentType = 'Bar', $transactionId = null, $items = []) {
         if (!$this->enabled) {
             return $this->mockTransaction('SIGN', $orderId, $amount);
         }
@@ -355,44 +386,34 @@ class TSEService {
             if ($response) {
                 // Generate QR code data
                 $qrData = $this->generateQRCodeDataFiskaly($response);
-                
+
                 return [
                     'transaction_id' => $response['_id'] ?? $transactionId,
+                    'transaction_number' => $response['number'] ?? 0,
                     'signature' => $response['signature']['value'] ?? '',
                     'signature_counter' => $response['signature']['counter'] ?? 0,
+                    'signature_algorithm' => $response['signature']['algorithm'] ?? 'ecdsa-plain-SHA256',
+                    'public_key' => $response['signature']['public_key'] ?? '',
                     'time_start' => $response['time_start'] ?? time(),
                     'time_end' => $response['time_end'] ?? time(),
                     'serial_number' => $response['tss_serial_number'] ?? $this->tssId,
                     'qr_code_data' => $qrData,
-                    'log_time' => date('Y-m-d H:i:s')
+                    'log_time' => date('Y-m-d H:i:s'),
+                    'client_id' => $this->clientId
                 ];
             }
 
             throw new Exception('Invalid signature response from Fiskaly TSE service');
         } catch (Exception $e) {
             error_log('TSE signTransaction error: ' . $e->getMessage());
-            return null;
-        }
-    }
 
-    /**
-     * Build process data for TSE signature (DSFinV-K format)
-     * @param string $orderId
-     * @param float $amount
-     * @param string $paymentType
-     * @return string Process data string
-     */
-    private function buildProcessData($orderId, $amount, $paymentType) {
-        // DSFinV-K format: Beleg^Brutto_Betrag^Zahlungsart^Bon-ID
-        $data = implode('^', [
-            'Beleg',
-            number_format($amount, 2, '.', ''),
-            $paymentType,
-            $orderId,
-            date('Y-m-d\TH:i:s')
-        ]);
-        
-        return $data;
+            // Return detailed error for debugging
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'order_id' => $orderId
+            ];
+        }
     }
 
     /**
@@ -403,7 +424,7 @@ class TSEService {
     private function generateQRCodeDataFiskaly($response) {
         // QR code format according to BSI TR-03153
         // V0;base64(CashPointClosingID);base64(processType);base64(processData);transactionNumber;signatureCounter;unixTime(start);unixTime(end);ecdsa-plain-SHA256;unixTime;base64(signature);base64(publicKey)
-        
+
         $parts = [
             'V0',
             base64_encode($this->tssId),
@@ -418,34 +439,26 @@ class TSEService {
             base64_encode($response['signature']['value'] ?? ''),
             base64_encode($response['signature']['public_key'] ?? '')
         ];
-        
+
         return implode(';', $parts);
     }
 
     /**
-     * Format timestamp for QR code (Unix timestamp)
-     * @param string $datetime
-     * @return string Unix timestamp
-     */
-    private function formatTimestamp($datetime) {
-        return strtotime($datetime);
-    }
-
-    /**
-     * Make API request to Fiskaly
+     * Make API request to Fiskaly with retry logic
      * @param string $method HTTP method
      * @param string $endpoint API endpoint
      * @param array $data Request data
+     * @param int $retryCount Retry attempt count
      * @return array|null Response data or null on failure
      */
-    private function apiRequest($method, $endpoint, $data = []) {
+    private function apiRequest($method, $endpoint, $data = [], $retryCount = 0) {
         $url = $this->apiBaseUrl . $endpoint;
         $authToken = $this->getAuthToken();
-        
+
         if (!$authToken) {
             throw new Exception('Failed to get auth token');
         }
-        
+
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -455,24 +468,32 @@ class TSEService {
             'Authorization: Bearer ' . $authToken,
             'Accept: application/json'
         ]);
-        
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15); // 15 second timeout
+
         if ($method !== 'GET' && !empty($data)) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         }
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         curl_close($ch);
-        
+
         if ($error) {
             throw new Exception('CURL error: ' . $error);
         }
-        
-        if ($httpCode >= 400) {
-            throw new Exception('Fiskaly API error: HTTP ' . $httpCode . ' - ' . $response);
+
+        // If unauthorized and we haven't retried yet, refresh token and retry
+        if ($httpCode === 401 && $retryCount === 0) {
+            error_log('TSE: Received 401, refreshing token and retrying...');
+            $this->getAuthToken(true); // Force refresh
+            return $this->apiRequest($method, $endpoint, $data, 1); // Retry once
         }
-        
+
+        if ($httpCode >= 400) {
+            throw new Exception('Fiskaly API error: HTTP ' . $httpCode . ' - ' . substr($response, 0, 500));
+        }
+
         return json_decode($response, true);
     }
 
@@ -485,25 +506,31 @@ class TSEService {
      */
     private function mockTransaction($action, $orderId = '', $amount = 0) {
         $transactionNumber = 'MOCK_' . time() . '_' . rand(1000, 9999);
-        
+
         if ($action === 'INIT') {
             return [
                 'transaction_number' => $transactionNumber,
+                'transaction_id' => 'mock-tx-' . uniqid(),
                 'time_start' => date('Y-m-d H:i:s'),
-                'serial_number' => 'MOCK_TSS_001'
+                'serial_number' => 'MOCK_TSS_001',
+                'mock_mode' => true
             ];
         }
-        
+
         // SIGN action
         return [
             'transaction_id' => $transactionNumber,
+            'transaction_number' => rand(1000, 9999),
             'signature' => 'MOCK_SIGNATURE_' . hash('sha256', $orderId . $amount . time()),
             'signature_counter' => rand(1000, 9999),
+            'signature_algorithm' => 'ecdsa-plain-SHA256',
+            'public_key' => base64_encode('MOCK_PUBLIC_KEY'),
             'time_start' => date('Y-m-d H:i:s', time() - 5),
             'time_end' => date('Y-m-d H:i:s'),
             'serial_number' => 'MOCK_TSS_001',
             'qr_code_data' => 'V0;MOCK_TSS_001;Kassenbeleg-V1;;;1000;' . time() . ';' . time() . ';ecdsa-plain-SHA256;unixTime;MOCK_SIG;PUB_001',
             'log_time' => date('Y-m-d H:i:s'),
+            'client_id' => $this->clientId,
             'mock_mode' => true
         ];
     }
@@ -517,11 +544,10 @@ class TSEService {
     public function exportDSFinVK($startDate, $endDate) {
         // This would query the database for all TSE transactions in the date range
         // and format them according to DSFinV-K specification
-        // Implementation depends on specific requirements
-        
+
         $db = getDBConnection();
         $stmt = $db->prepare("
-            SELECT 
+            SELECT
                 order_number,
                 tse_transaction_id,
                 tse_signature,
@@ -536,7 +562,7 @@ class TSEService {
             ORDER BY created_at
         ");
         $stmt->execute([$startDate, $endDate]);
-        
+
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -557,17 +583,21 @@ class TSEService {
             // Try to get TSS info
             $endpoint = "/tss/{$this->tssId}";
             $response = $this->apiRequest('GET', $endpoint);
-            
+
             if ($response) {
                 return [
                     'status' => 'online',
                     'message' => 'TSE service is operational',
                     'healthy' => true,
                     'tss_id' => $this->tssId,
-                    'response' => $response
+                    'tss_state' => $response['state'] ?? 'unknown',
+                    'client_id' => $this->clientId,
+                    'api_url' => $this->apiBaseUrl,
+                    'token_cached' => !empty($this->authToken),
+                    'token_expires_in' => max(0, $this->tokenExpiry - time())
                 ];
             }
-            
+
             return [
                 'status' => 'error',
                 'message' => 'Invalid response from TSE service',
@@ -581,18 +611,28 @@ class TSEService {
             ];
         }
     }
+
+    /**
+     * Clear cached auth token (useful for testing or troubleshooting)
+     */
+    public function clearTokenCache() {
+        $this->authToken = null;
+        $this->tokenExpiry = 0;
+        unset($_SESSION['fiskaly_token']);
+        unset($_SESSION['fiskaly_token_expiry']);
+        error_log('TSE: Token cache cleared');
+    }
 }
 
 // Create global TSE service instance
 function getTSEService() {
     static $tseService = null;
-    
+
     if ($tseService === null) {
         $tseService = new TSEService();
     }
-    
+
     return $tseService;
 }
 
 ?>
-
