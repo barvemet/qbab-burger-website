@@ -72,16 +72,38 @@ FISKALY_MIDDLEWARE_URL=
 
 6. **Speichere die Datei**
 
-### Schritt 3: Komplette `.env` Konfiguration prüfen
+### Schritt 3: Veritabanı Bilgilerini Bul
+
+**ÖNEMLİ**: Hosting sağlayıcından doğru veritabanı bilgilerini al!
+
+**cPanel/Plesk Kullanıyorsan**:
+1. Control Panel'e giriş yap
+2. "MySQL Databases" veya "Veritabanları" bölümüne git
+3. Mevcut veritabanlarını gör:
+   - **DB_HOST**: Genellikle `localhost` veya `mysql.your-host.com` gibi
+   - **DB_NAME**: Veritabanı adı (örn: `u123456_qbab`)
+   - **DB_USER**: Veritabanı kullanıcısı (örn: `u123456_admin`)
+   - **DB_PASS**: Şifre (hosting kurulumunda oluşturduğun)
+
+**Strato Hosting Kullanıyorsan**:
+- DB_HOST genellikle: `rdbms.strato.de` veya `localhost`
+- Strato Dashboard → Datenbanken → MySQL bölümünden bilgileri al
+
+**Diğer Hosting Sağlayıcıları**:
+- Hosting control panel'de "Database" veya "MySQL" ara
+- phpMyAdmin varsa, giriş bilgileri aynı zamanda `.env` için kullanılır
+
+### Schritt 4: Komplette `.env` Konfiguration prüfen
 
 Stelle sicher, dass deine `.env` Datei diese Einstellungen hat:
 
 ```env
 # Database Configuration
-DB_HOST=localhost
-DB_NAME=qbab_database
-DB_USER=dein_db_user
-DB_PASS=dein_db_password
+# WICHTIG: Replace with YOUR actual database credentials from hosting!
+DB_HOST=localhost                    # ← Check your hosting control panel!
+DB_NAME=qbab_database               # ← Your actual database name
+DB_USER=dein_db_user                # ← Your database username
+DB_PASS=dein_db_password            # ← Your database password
 DB_CHARSET=utf8mb4
 
 # Site URLs
@@ -141,6 +163,81 @@ chmod 644 .env
 ---
 
 ## ✅ TESTEN NACH DER ÄNDERUNG
+
+### Test 0: Veritabanı Bağlantısı (ÖNCELİKLE BU!)
+
+**ÖNEMLİ**: Önce veritabanı bağlantısını test et!
+
+```bash
+curl https://q-bab.de/api/kasse/test-db-connection.php
+```
+
+**Başarılı bağlantı** (örnek):
+```json
+{
+    "test": "Database Connection",
+    "status": "SUCCESS",
+    "message": "Database connection successful!",
+    "details": {
+        "env_loaded": {
+            "DB_HOST": "Found",
+            "DB_NAME": "Found",
+            "DB_USER": "Found",
+            "DB_PASS": "Found"
+        },
+        "connection": {
+            "host": "localhost",
+            "database": "qbab_database",
+            "user": "qbab_user",
+            "connected": true
+        },
+        "database_info": {
+            "mysql_version": "8.0.35",
+            "current_database": "qbab_database",
+            "server_time": "2025-11-16 15:30:00"
+        },
+        "tables": {
+            "orders_exists": true,
+            "orders_count": 5
+        }
+    }
+}
+```
+
+**Başarısız bağlantı örnekleri**:
+
+**Hata 1: Yanlış şifre**
+```json
+{
+    "status": "ERROR",
+    "message": "Database connection failed",
+    "error": "Access denied for user 'qbab_user'@'localhost'",
+    "help": "Check DB_USER and DB_PASS in .env file"
+}
+```
+➜ **Çözüm**: `.env` dosyasında `DB_USER` ve `DB_PASS` kontrol et
+
+**Hata 2: Veritabanı bulunamadı**
+```json
+{
+    "status": "ERROR",
+    "error": "Unknown database 'qbab_database'",
+    "help": "Check DB_NAME in .env file - database does not exist"
+}
+```
+➜ **Çözüm**: Hosting'de veritabanını oluştur veya `.env`'de doğru ismi yaz
+
+**Hata 3: Host'a bağlanılamıyor**
+```json
+{
+    "status": "ERROR",
+    "error": "Can't connect to MySQL server on 'localhost'",
+    "help": "Check DB_HOST in .env file - cannot reach database server"
+}
+```
+➜ **Çözüm**: `DB_HOST` yanlış, hosting control panel'den doğru host'u al
+
+---
 
 ### Test 1: Health Check
 ```bash
